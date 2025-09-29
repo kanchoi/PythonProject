@@ -19,6 +19,9 @@ def check_db_connection():
     conn.close()
     return result[0] == 1
 
+def add_integer(a, b):
+    return a + b
+
 if __name__ == "__main__":
     print(get_message())
     if check_db_connection():

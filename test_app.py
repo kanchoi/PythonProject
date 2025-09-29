@@ -5,3 +5,7 @@ def test_message():
 
 def test_check_db_connection():
     assert app.check_db_connection() is True
+
+def test_add_number():
+    assert app.add_integer(1,2) == 3
+    assert app.add_integer(3,5) == 8
