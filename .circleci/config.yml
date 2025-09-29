@@ -62,7 +62,12 @@ jobs:
           command: pytest --junitxml=test-results/results.xml
       - store_test_results:
           path: test-results
-      - run: aws s3 sync ./venv/build s3://circleci-demo-personal
+      - aws-cli/setup:
+          role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+          profile_name: default
+      - run:
+          name: Deploy to S3
+          command: aws s3 sync ./venv/build s3://circleci-demo-personal
 
 
   deploy:
