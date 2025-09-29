@@ -69,9 +69,17 @@ jobs:
       - store_test_results:
           path: test-results
 
-      - aws-cli/setup:
-          role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
-          profile_name: default
+      - run:
+          name: Setup AWS CLI (main only)
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              echo "Setting up AWS CLI..."
+              aws-cli/setup \
+                role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/CIRCLE_OPENID \
+                profile_name=default
+            else
+              echo "Skipping AWS CLI setup for branch ${CIRCLE_BRANCH}"
+            fi
 
       - run:
           name: Publish an Artifact to S3 (main only)
