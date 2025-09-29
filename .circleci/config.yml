@@ -10,7 +10,7 @@ executors:
       - image: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
         aws_auth:
           oidc_role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
-      - image: postgres:13  # sidecar DB
+      - image: cimg/postgres:14.0  # sidecar DB
         environment:
           POSTGRES_USER: testuser
           POSTGRES_PASSWORD: testpassword
