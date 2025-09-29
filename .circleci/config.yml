@@ -70,6 +70,25 @@ jobs:
       - store_test_results:
           path: test-results
 
+#      - aws-cli/setup:
+#          role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+#          profile_name: default
+#
+#      - run:
+#          name: Publish an Artifact to S3
+#          command: |
+#            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+#              aws s3 sync test-results/ s3://circleci-demo-personal
+#            else
+#              echo "Skipping artifacts Deployment to S3"
+#            fi
+
+  deploy:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - setup_remote_docker
       - aws-cli/setup:
           role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
           profile_name: default
@@ -82,20 +101,6 @@ jobs:
             else
               echo "Skipping artifacts Deployment to S3"
             fi
-
-  deploy:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - checkout
-      - setup_remote_docker
-      - aws-cli/setup
-      - run:
-          name: Deploy Docker image (main branch only)
-          command: |
-            docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-            docker tag $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
-            docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:latest
 
 
 workflows:
