@@ -74,8 +74,14 @@ jobs:
           profile_name: default
 
       - run:
-          name: Publish an Artifact to S3
-          command: aws s3 sync test-results/ s3://circleci-demo-personal
+          name: Publish an Artifact to S3 (main only)
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              aws s3 sync test-results/ s3://circleci-demo-personal
+            else
+              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
+            fi 
+          
 
 
 #  deploy:
