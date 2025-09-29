@@ -2,12 +2,15 @@ version: 2.1
 
 orbs:
   aws-cli: circleci/aws-cli@5.1.0
+  aws-ecr: circleci/aws-ecr@9.6.0
 
 executors:
   python-executor:
     docker:
-      - image: cimg/python:3.10
-      - image: postgres:13  # sidecar DB
+      - image: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
+        aws_auth:
+          oidc_role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+      - image: cimg/postgres:14.0  # sidecar DB
         environment:
           POSTGRES_USER: testuser
           POSTGRES_PASSWORD: testpassword
@@ -17,28 +20,20 @@ jobs:
   build:
     docker:
       - image: cimg/base:stable
+      - image: cimg/python:3.10-browsers
     steps:
       - checkout
       - setup_remote_docker:
             docker_layer_caching: true
-      - aws-cli/setup:
-          role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
-          profile_name: default
-      - run:
-          name: Check S3 Credentials
-          command: aws s3 ls --region $AWS_REGION
-      - run:
-          name: Build Docker image
-          command: docker build -t myapp:${CIRCLE_SHA1} .
-      - run:
-          name: Push Docker image (main branch only)
-          command: |
-            if [ "${CIRCLE_BRANCH}" == "main" ]; then
-              docker tag myapp:${CIRCLE_SHA1} $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-              docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-            else
-              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
-            fi
+
+      - aws-ecr/build_and_push_image:
+          auth:
+            - aws-cli/setup:
+                role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+                profile_name: default
+          repo: myapp
+          tag: ${CIRCLE_SHA1}
+          region: $AWS_REGION
 
   test:
     executor: python-executor
@@ -56,11 +51,17 @@ jobs:
             - ~/.cache/pip
           key: v1-pip-{{ checksum "requirements.txt" }}
       - run:
+          name: Install Postgres client
+          command: |
+            apt-get update
+            apt-get install -y postgresql-client
+      - run:
           name: Wait for Postgres
           command: |
+            echo "Waiting for Postgres..."
             for i in {1..30}; do
-              nc -z localhost 5432 && echo "Postgres is up" && exit 0
-              sleep 1
+              pg_isready -h localhost -p 5432 -U testuser && echo "Postgres is up" && exit 0
+              sleep 2
             done
             echo "Postgres did not start in time" && exit 1
       - run:
@@ -68,27 +69,35 @@ jobs:
           command: pytest --junitxml=test-results/results.xml
       - store_test_results:
           path: test-results
-      - aws-cli/setup:
-          role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
-          profile_name: default
-      - run:
-          name: Deploy to S3
-          command: aws s3 sync test-results/ s3://circleci-demo-personal
 
+#      - aws-cli/setup:
+#          role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+#          profile_name: default
+#
+#      - run:
+#          name: Publish an Artifact to S3
+#          command: |
+#            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+#              aws s3 sync test-results/ s3://circleci-demo-personal
+#            else
+#              echo "Skipping artifacts Deployment to S3"
+#            fi
 
   deploy:
     docker:
       - image: cimg/base:stable
     steps:
-      - checkout
-      - setup_remote_docker
-      - aws-cli/setup
+#      - checkout
+#      - setup_remote_docker
+      - aws-cli/setup:
+          role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+          profile_name: default
+
       - run:
-          name: Deploy Docker image (main branch only)
+          name: Publish an Artifact to S3
           command: |
-            docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-            docker tag $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
-            docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:latest
+            aws s3 sync test-results/ s3://circleci-demo-personal
+
 
 
 workflows:
