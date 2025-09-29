@@ -45,6 +45,7 @@ jobs:
 #              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
 #            fi
           command: |
+            docker tag myapp:${CIRCLE_SHA1} $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
             docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
 
   test:
