@@ -20,6 +20,7 @@ jobs:
   build:
     docker:
       - image: cimg/base:stable
+      - image: cimg/python:3.10-browsers
     steps:
       - checkout
       - setup_remote_docker:
