@@ -2,7 +2,7 @@ version: 2.1
 
 orbs:
   aws-cli: circleci/aws-cli@5.1.0
-  aws-ecr: circleci/aws-ecr@8.2.1
+  aws-ecr: circleci/aws-ecr@9.6.0
 
 executors:
   python-executor:
@@ -28,18 +28,15 @@ jobs:
 #      - run:
 #          name: Build Docker image
 #          command: docker build -t myapp:${CIRCLE_SHA1} .
-
-      - aws-ecr/build_and_push_image:
+      - aws-ecr/ecr_login:
+          role-arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+          region: $AWS_REGION
+      - aws-ecr/build-and-push-image:
           account-url: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
           repo: myapp
           tag: ${CIRCLE_SHA1}
           region: $AWS_REGION
           role-arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
-#      - run:
-#          name: Authenticate with ECR
-#          command: |
-#            aws ecr get-login-password --region $AWS_REGION \
-#            | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 #      - run:
 #          name: Push Docker image
 ##          command: |
