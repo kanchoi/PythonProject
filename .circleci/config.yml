@@ -21,7 +21,7 @@ jobs:
       - checkout
       - setup_remote_docker
       - aws-cli/setup:
-          role/arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+          role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
           profile_name: default
       - run:
           name: Build Docker image
