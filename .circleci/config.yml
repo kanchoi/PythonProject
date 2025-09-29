@@ -7,7 +7,7 @@ orbs:
 executors:
   python-executor:
     docker:
-      - image: cimg/python:3.10
+      - image: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
       - image: postgres:13  # sidecar DB
         environment:
           POSTGRES_USER: testuser
