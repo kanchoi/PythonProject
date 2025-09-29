@@ -2,6 +2,7 @@ version: 2.1
 
 orbs:
   aws-cli: circleci/aws-cli@5.1.0
+  aws-ecr: circleci/aws-ecr@9.0
 
 executors:
   python-executor:
@@ -21,32 +22,38 @@ jobs:
       - checkout
       - setup_remote_docker:
             docker_layer_caching: true
-      - aws-cli/setup:
+      - aws-ecr/ecr-login:
           role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
           profile_name: default
-      - run:
-          name: Check S3 Credentials
-          command: aws s3 ls --region $AWS_REGION
+#      - run:
+#          name: Check S3 Credentials
+#          command: aws s3 ls --region $AWS_REGION
       - run:
           name: Build Docker image
           command: docker build -t myapp:${CIRCLE_SHA1} .
+
+      - aws-ecr/push-image:
+          account-url: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+          repo: myapp
+          tag: ${CIRCLE_SHA1}
+          region: $AWS_REGION
 #      - run:
 #          name: Authenticate with ECR
 #          command: |
 #            aws ecr get-login-password --region $AWS_REGION \
 #            | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-      - run:
-          name: Push Docker image
+#      - run:
+#          name: Push Docker image
+##          command: |
+##            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+##              docker tag myapp:${CIRCLE_SHA1} $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
+##              docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
+##            else
+##              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
+##            fi
 #          command: |
-#            if [ "${CIRCLE_BRANCH}" == "main" ]; then
-#              docker tag myapp:${CIRCLE_SHA1} $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-#              docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-#            else
-#              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
-#            fi
-          command: |
-            docker tag myapp:${CIRCLE_SHA1} $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-            docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
+#            docker tag myapp:${CIRCLE_SHA1} $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
+#            docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
 
   test:
     executor: python-executor
