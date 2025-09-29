@@ -6,7 +6,7 @@ orbs:
 executors:
   python-executor:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:3.10
       - image: postgres:13  # sidecar DB
         environment:
           POSTGRES_USER: testuser
@@ -14,6 +14,31 @@ executors:
           POSTGRES_DB: testdb
 
 jobs:
+  build:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - setup_remote_docker
+      - aws-cli/setup:
+          role/arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+          profile_name: default
+      - run:
+          name: Build Docker image
+          command: docker build -t myapp:${CIRCLE_SHA1} .
+      - run:
+          name: Push Docker image (main branch only)
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+              REPO=myapp
+              docker tag myapp:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+              aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+              docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+            else
+              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
+            fi
+
   test:
     executor: python-executor
     steps:
@@ -33,30 +58,10 @@ jobs:
           name: Run tests
           command: pytest --junitxml=test-results/results.xml
       - store_test_results:
-          path: test-results  # CircleCI will collect results here
-
-  build:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - checkout
-      - setup_remote_docker
-      - aws-cli/setup
+          path: test-results
       - run:
-          name: Build Docker image
-          command: docker build -t myapp:${CIRCLE_SHA1} .
-      - run:
-          name: Push Docker image (main only)
-          command: |
-            if [ "${CIRCLE_BRANCH}" == "main" ]; then
-              ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-              REPO=myapp
-              docker tag myapp:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-              aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-              docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-            else
-              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
-            fi
+          name: Check S3 Credentials
+          command: aws s3 ls --region $AWS_REGION
 
   deploy:
     docker:
@@ -66,19 +71,14 @@ jobs:
       - setup_remote_docker
       - aws-cli/setup
       - run:
-          name: Deploy Docker image (main only)
+          name: Deploy Docker image (main branch only)
           command: |
-            if [ "${CIRCLE_BRANCH}" == "main" ]; then
-              ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-              REPO=myapp
-              docker pull $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-              docker tag $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
-              docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
-              # optional ECS deployment
-              echo "ECS service updated (example)"
-            else
-              echo "Skipping deploy for branch ${CIRCLE_BRANCH}"
-            fi
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            REPO=myapp
+            docker pull $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+            docker tag $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
+            docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
+
 
 workflows:
   version: 2
