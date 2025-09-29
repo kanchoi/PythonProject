@@ -33,7 +33,7 @@ jobs:
           name: Run tests
           command: pytest --junitxml=test-results/results.xml
       - store_test_results:
-          path: test-results  # CircleCI will collect results here
+          path: ./reports/pytest # CircleCI will collect results here
 
   build:
     docker:
