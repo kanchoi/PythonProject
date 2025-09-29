@@ -4,97 +4,109 @@ orbs:
   aws-cli: circleci/aws-cli@5.1.0
 
 executors:
-  python-executor:
+  docker-executor:
     docker:
-      - image: cimg/python:3.11
-      - image: postgres:13  # sidecar DB
-        environment:
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpassword
-          POSTGRES_DB: testdb
+      - image: cimg/base:stable
+    resource_class: medium
 
 jobs:
-  test:
-    executor: python-executor
-    steps:
-      - checkout
-      - run:
-          name: Install dependencies
-          command: pip install -r requirements.txt
-      - run:
-          name: Wait for Postgres
-          command: |
-            for i in {1..30}; do
-              nc -z localhost 5432 && echo "Postgres is up" && exit 0
-              sleep 1
-            done
-            echo "Postgres did not start in time" && exit 1
-      - run:
-          name: Run Pytest Tests
-          command: |
-            . venv/bin/activate
-            mkdir -p test-results # Create a directory for test results
-            pytest --junitxml=test-results/junit.xml # Run pytest and output to JUnit XML
-
-      - store_test_results:
-          path: test-results # Specify the path to your JUnit XML file(s)
-
   build:
     docker:
       - image: cimg/base:stable
     steps:
       - checkout
       - setup_remote_docker
-      - aws-cli/setup
       - run:
-          name: Build Docker image
-          command: docker build -t myapp:${CIRCLE_SHA1} .
-      - run:
-          name: Push Docker image (main only)
+          name: Build custom Docker image
           command: |
-            if [ "${CIRCLE_BRANCH}" == "main" ]; then
-              ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-              REPO=myapp
-              docker tag myapp:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-              aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-              docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-            else
-              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
-            fi
+            docker build -t myapp:${CIRCLE_SHA1} .
+      - run:
+          name: Save Docker image
+          command: |
+            docker save myapp:${CIRCLE_SHA1} | gzip > myapp.tar.gz
+      - persist_to_workspace:
+          root: .
+          paths:
+            - myapp.tar.gz
 
-  deploy:
+  test:
     docker:
-      - image: cimg/base:stable
+      - image: cimg/python:3.10  # test runner (non-scripting language support here)
+      - image: postgres:14       # sidecar DB container
+        environment:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
     steps:
       - checkout
-      - setup_remote_docker
-      - aws-cli/setup
+      - attach_workspace:
+          at: .
       - run:
-          name: Deploy Docker image (main only)
+          name: Load Docker image
           command: |
-            if [ "${CIRCLE_BRANCH}" == "main" ]; then
-              ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-              REPO=myapp
-              docker pull $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-              docker tag $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
-              docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
-              # optional ECS deployment
-              echo "ECS service updated (example)"
-            else
-              echo "Skipping deploy for branch ${CIRCLE_BRANCH}"
-            fi
+            gunzip -c myapp.tar.gz | docker load
+      - run:
+          name: Wait for Postgres
+          command: |
+            for i in `seq 1 30`; do
+              nc -z localhost 5432 && echo "Postgres is up" && exit 0
+              sleep 1
+            done
+            echo "Postgres did not start in time" && exit 1
+      - run:
+          name: Run tests
+          command: |
+            pip install -r requirements.txt
+            pytest --junitxml=test-results/results.xml
+      - store_test_results:
+          path: test-results
+
+  deploy:
+    executor: docker-executor
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - setup_remote_docker
+      - run:
+          name: Load Docker image
+          command: |
+            gunzip -c myapp.tar.gz | docker load
+      - run:
+          name: Authenticate with AWS (OIDC)
+          command: |
+            aws sts get-caller-identity
+      - run:
+          name: Push Docker image to ECR
+          command: |
+            AWS_REGION=us-east-1
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            REPO=myapp
+            docker tag myapp:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+            docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+      - run:
+          name: Deploy to ECS service
+          command: |
+            echo "Here you’d run ecs update-service --force-new-deployment"
 
 workflows:
   version: 2
   ci_pipeline:
     jobs:
-      - test
       - build:
-          requires:
-            - test
-      - deploy:
+          filters:
+            branches:
+              ignore: gh-pages
+      - test:
           requires:
             - build
+          filters:
+            branches:
+              ignore: gh-pages
+      - deploy:
+          requires:
+            - test
           filters:
             branches:
               only: main
