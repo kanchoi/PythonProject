@@ -28,7 +28,7 @@ jobs:
 #      - run:
 #          name: Build Docker image
 #          command: docker build -t myapp:${CIRCLE_SHA1} .
-      - aws-ecr/ecr_login:
+      - aws-ecr/setup:
           role-arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
           region: $AWS_REGION
       - aws-ecr/build-and-push-image:
