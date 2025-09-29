@@ -22,7 +22,7 @@ jobs:
       - checkout
       - setup_remote_docker:
             docker_layer_caching: true
-      - aws-ecr/ecr-login:
+      - aws-ecr/login:
           role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
           profile_name: default
 #      - run:
