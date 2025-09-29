@@ -22,21 +22,19 @@ jobs:
       - checkout
       - setup_remote_docker:
             docker_layer_caching: true
-      - aws-ecr/login:
-          role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
-          profile_name: default
 #      - run:
 #          name: Check S3 Credentials
 #          command: aws s3 ls --region $AWS_REGION
-      - run:
-          name: Build Docker image
-          command: docker build -t myapp:${CIRCLE_SHA1} .
+#      - run:
+#          name: Build Docker image
+#          command: docker build -t myapp:${CIRCLE_SHA1} .
 
-      - aws-ecr/push-image:
+      - aws-ecr/build-and-push-image:
           account-url: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
           repo: myapp
           tag: ${CIRCLE_SHA1}
           region: $AWS_REGION
+          role-arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
 #      - run:
 #          name: Authenticate with ECR
 #          command: |
