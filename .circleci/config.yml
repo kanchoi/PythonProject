@@ -19,7 +19,8 @@ jobs:
       - image: cimg/base:stable
     steps:
       - checkout
-      - setup_remote_docker
+      - setup_remote_docker:
+            docker_layer_caching: true
       - aws-cli/setup:
           role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
           profile_name: default
@@ -46,9 +47,17 @@ jobs:
     executor: python-executor
     steps:
       - checkout
-      - run:
-          name: Install dependencies
-          command: pip install -r requirements.txt
+      - restore_cache:
+          keys:
+            - v1-pip-{{ checksum "requirements.txt" }}
+            - v1-pip-
+            - run:
+                name: Install dependencies
+                command: pip install -r requirements.txt
+            - save_cache:
+                paths:
+                  - ~/.cache/pip
+                key: v1-pip-{{ checksum "requirements.txt" }}
       - run:
           name: Wait for Postgres
           command: |
@@ -67,7 +76,7 @@ jobs:
           profile_name: default
       - run:
           name: Deploy to S3
-          command: aws s3 sync ./venv/build s3://circleci-demo-personal
+          command: aws s3 sync test-results/ s3://circleci-demo-personal
 
 
   deploy:
