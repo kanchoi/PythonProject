@@ -1,7 +1,7 @@
 import app
 
 def test_message():
-    assert app.get_message() == "Hello, World!S"
+    assert app.get_message() == "Hello, World!"
 
 def test_check_db_connection():
     assert app.check_db_connection() is True
