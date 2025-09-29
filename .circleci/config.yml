@@ -28,12 +28,13 @@ jobs:
 #      - run:
 #          name: Build Docker image
 #          command: docker build -t myapp:${CIRCLE_SHA1} .
-      - aws-ecr/build-and-push-image:
-          account-url: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - aws-ecr/build_and_push_image:
+          auth:
+            - aws-cli/setup:
+                role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
           repo: myapp
           tag: ${CIRCLE_SHA1}
           region: $AWS_REGION
-          role-arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
 #      - run:
 #          name: Push Docker image
 ##          command: |
