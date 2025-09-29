@@ -30,10 +30,12 @@ jobs:
             done
             echo "Postgres did not start in time" && exit 1
       - run:
-          name: Run tests
-          command: pytest --junitxml=test-results/results.xml
+          name: Run Pytest Tests
+          command: |
+            mkdir -p test-results # Create a directory for test results
+            pytest --junitxml=test-results/junit.xml # Run pytest and output to JUnit XML
       - store_test_results:
-          path: ./reports/pytest # CircleCI will collect results here
+          path: ./test-results # Specify the path to your JUnit XML file(s)
 
   build:
     docker:
