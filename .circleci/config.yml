@@ -87,8 +87,8 @@ jobs:
     docker:
       - image: cimg/base:stable
     steps:
-      - checkout
-      - setup_remote_docker
+#      - checkout
+#      - setup_remote_docker
       - aws-cli/setup:
           role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
           profile_name: default
@@ -96,11 +96,8 @@ jobs:
       - run:
           name: Publish an Artifact to S3
           command: |
-            if [ "${CIRCLE_BRANCH}" == "main" ]; then
-              aws s3 sync test-results/ s3://circleci-demo-personal
-            else
-              echo "Skipping artifacts Deployment to S3"
-            fi
+            aws s3 sync test-results/ s3://circleci-demo-personal
+
 
 
 workflows:
@@ -113,7 +110,7 @@ workflows:
             - build
       - deploy:
           requires:
-            - build
+            - test
           filters:
             branches:
               only: main
