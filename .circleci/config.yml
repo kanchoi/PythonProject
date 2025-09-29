@@ -32,10 +32,12 @@ jobs:
       - run:
           name: Run Pytest Tests
           command: |
+            . venv/bin/activate
             mkdir -p test-results # Create a directory for test results
             pytest --junitxml=test-results/junit.xml # Run pytest and output to JUnit XML
+
       - store_test_results:
-          path: ./test-results # Specify the path to your JUnit XML file(s)
+          path: test-results # Specify the path to your JUnit XML file(s)
 
   build:
     docker:
