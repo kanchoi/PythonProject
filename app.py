@@ -2,7 +2,7 @@ import os
 import psycopg2
 
 def get_message():
-    return "Hello World! Field Engineer"
+    return "Hello World!"
 
 def check_db_connection():
     conn = psycopg2.connect(
