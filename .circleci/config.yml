@@ -16,39 +16,40 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker
+      - aws-cli/setup  # install AWS CLI
       - run:
-          name: Build custom Docker image
+          name: Build and push Docker image to ECR
           command: |
-            docker build -t myapp:${CIRCLE_SHA1} .
-      - run:
-          name: Save Docker image
-          command: |
-            docker save myapp:${CIRCLE_SHA1} | gzip > myapp.tar.gz
-      - persist_to_workspace:
-          root: .
-          paths:
-            - myapp.tar.gz
+            AWS_REGION=us-east-1
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            REPO=myapp
+
+            # Authenticate Docker with ECR
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+
+            # Build image with commit SHA
+            docker build -t $REPO:${CIRCLE_SHA1} .
+
+            # Tag with full ECR path
+            docker tag $REPO:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+
+            # Push commit-tagged image
+            docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
 
   test:
     docker:
-      - image: cimg/python:3.10  # test runner (non-scripting language support here)
-      - image: postgres:14       # sidecar DB container
+      - image: cimg/python:3.10
+      - image: postgres:14
         environment:
           POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpass
+          POSTGRES_PASSWORD: testpassword
           POSTGRES_DB: testdb
     steps:
       - checkout
-      - attach_workspace:
-          at: .
-      - run:
-          name: Load Docker image
-          command: |
-            gunzip -c myapp.tar.gz | docker load
       - run:
           name: Wait for Postgres
           command: |
-            for i in `seq 1 30`; do
+            for i in {1..30}; do
               nc -z localhost 5432 && echo "Postgres is up" && exit 0
               sleep 1
             done
@@ -64,33 +65,30 @@ jobs:
   deploy:
     docker:
       - image: cimg/base:stable
-    executor: docker-executor
     steps:
       - checkout
-      - attach_workspace:
-          at: .
       - setup_remote_docker
+      - aws-cli/setup
       - run:
-          name: Load Docker image
-          command: |
-            gunzip -c myapp.tar.gz | docker load
-      - run:
-          name: Authenticate with AWS (OIDC)
-          command: |
-            aws sts get-caller-identity
-      - run:
-          name: Push Docker image to ECR
+          name: Pull and deploy Docker image
           command: |
             AWS_REGION=us-east-1
             ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
             REPO=myapp
-            docker tag myapp:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+
+            # Authenticate Docker with ECR
             aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-            docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-      - run:
-          name: Deploy to ECS service
-          command: |
-            echo "Here you’d run ecs update-service --force-new-deployment"
+
+            # Pull commit image
+            docker pull $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+
+            # Optionally retag as latest
+            docker tag $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
+            docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
+
+            # Example ECS update (placeholder)
+            echo "Updating ECS service..."
+            # aws ecs update-service --cluster mycluster --service myapp-service --force-new-deployment --region $AWS_REGION
 
 workflows:
   version: 2
