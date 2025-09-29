@@ -70,6 +70,7 @@ jobs:
           path: test-results
 
       - run:
+          name: Setup AWS CLI (main only)
           command: |
             if [ "${CIRCLE_BRANCH}" == "main" ]; then
               echo "Setting up AWS CLI..."
