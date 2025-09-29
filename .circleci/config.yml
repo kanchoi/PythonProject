@@ -8,6 +8,8 @@ executors:
   python-executor:
     docker:
       - image: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
+        aws_auth:
+          oidc_role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
       - image: postgres:13  # sidecar DB
         environment:
           POSTGRES_USER: testuser
@@ -36,18 +38,6 @@ jobs:
           repo: myapp
           tag: ${CIRCLE_SHA1}
           region: $AWS_REGION
-#      - run:
-#          name: Push Docker image
-##          command: |
-##            if [ "${CIRCLE_BRANCH}" == "main" ]; then
-##              docker tag myapp:${CIRCLE_SHA1} $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-##              docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-##            else
-##              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
-##            fi
-#          command: |
-#            docker tag myapp:${CIRCLE_SHA1} $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
-#            docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp:${CIRCLE_SHA1}
 
   test:
     executor: python-executor
@@ -82,8 +72,12 @@ jobs:
           profile_name: default
       - run:
           name: Deploy to S3
-          command: aws s3 sync test-results/ s3://circleci-demo-personal
-
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              aws s3 sync test-results/ s3://circleci-demo-personal
+            else
+              echo "Skipping artifacts Deployment to S3"
+            fi
 
   deploy:
     docker:
