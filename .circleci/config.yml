@@ -30,14 +30,10 @@ jobs:
             done
             echo "Postgres did not start in time" && exit 1
       - run:
-          name: run tests
-          command: |
-            . venv/bin/activate
-            mkdir test-results
-            pytest --junitxml=test-results/junit.xml tests
-
+          name: Run tests
+          command: pytest --junitxml=test-results/results.xml
       - store_test_results:
-          path: test-results 
+          path: test-results  # CircleCI will collect results here
 
   build:
     docker:
