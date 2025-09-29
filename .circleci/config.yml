@@ -62,6 +62,8 @@ jobs:
           path: test-results
 
   deploy:
+    docker:
+      - image: cimg/base:stable
     executor: docker-executor
     steps:
       - checkout
