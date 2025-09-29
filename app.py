@@ -2,7 +2,7 @@ import os
 import psycopg2
 
 def get_message():
-    return "Hello World!"
+    return "Hello, World!"
 
 def check_db_connection():
     conn = psycopg2.connect(
@@ -18,6 +18,9 @@ def check_db_connection():
     cur.close()
     conn.close()
     return result[0] == 1
+
+def add_integer(a, b):
+    return a + b
 
 if __name__ == "__main__":
     print(get_message())

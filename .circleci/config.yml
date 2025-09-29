@@ -1,0 +1,96 @@
+version: 2.1
+
+orbs:
+  aws-cli: circleci/aws-cli@5.1.0
+
+executors:
+  python-executor:
+    docker:
+      - image: cimg/python:3.11
+      - image: postgres:13  # sidecar DB
+        environment:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+
+jobs:
+  test:
+    executor: python-executor
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: pip install -r requirements.txt
+      - run:
+          name: Wait for Postgres
+          command: |
+            for i in {1..30}; do
+              nc -z localhost 5432 && echo "Postgres is up" && exit 0
+              sleep 1
+            done
+            echo "Postgres did not start in time" && exit 1
+      - run:
+          name: Run tests
+          command: pytest --junitxml=test-results/results.xml
+      - store_test_results:
+          path: test-results  # CircleCI will collect results here
+
+  build:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - setup_remote_docker
+      - aws-cli/setup
+      - run:
+          name: Build Docker image
+          command: docker build -t myapp:${CIRCLE_SHA1} .
+      - run:
+          name: Push Docker image (main only)
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+              REPO=myapp
+              docker tag myapp:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+              aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+              docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+            else
+              echo "Skipping Docker push for branch ${CIRCLE_BRANCH}"
+            fi
+
+  deploy:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - setup_remote_docker
+      - aws-cli/setup
+      - run:
+          name: Deploy Docker image (main only)
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+              REPO=myapp
+              docker pull $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+              docker tag $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
+              docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
+              # optional ECS deployment
+              echo "ECS service updated (example)"
+            else
+              echo "Skipping deploy for branch ${CIRCLE_BRANCH}"
+            fi
+
+workflows:
+  version: 2
+  ci_pipeline:
+    jobs:
+      - build
+      - test:
+          requires:
+            - build
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: main
