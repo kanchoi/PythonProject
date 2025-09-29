@@ -84,10 +84,10 @@ workflows:
   version: 2
   ci_pipeline:
     jobs:
-      - test
-      - build:
+      - build
+      - test:
           requires:
-            - test
+            - build
       - deploy:
           requires:
             - build
