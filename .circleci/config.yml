@@ -49,17 +49,17 @@ jobs:
           paths:
             - ~/.cache/pip
           key: v1-pip-{{ checksum "requirements.txt" }}
-#      - run:
-#          name: Install Postgres client
-#          command: |
-#            sudo apt-get update
-#            sudo apt-get install -y postgresql-client
+      - run:
+          name: Install Postgres client
+          command: |
+            apt-get update
+            apt-get install -y postgresql-client
       - run:
           name: Wait for Postgres
           command: |
             echo "Waiting for Postgres..."
             for i in {1..30}; do
-              nc -z localhost 5432 && echo "Postgres is up" && exit 0
+              pg_isready -h localhost -p 5432 -U testuser && echo "Postgres is up" && exit 0
               sleep 2
             done
             echo "Postgres did not start in time" && exit 1
