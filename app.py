@@ -13,7 +13,8 @@ def check_db_connection():
         port= int(os.getenv("POSTGRES_PORT", "5432"))
     )
     cur= conn.cursor()
-    cur.execute("SELECT 1")
+    cur.execute("SELECT 1;")
+    result = cur.fetchone()
     cur.close()
     conn.close()
     return result[0] == 1
