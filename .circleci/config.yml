@@ -32,6 +32,7 @@ jobs:
           auth:
             - aws-cli/setup:
                 role_arn: arn:aws:iam::$AWS_IAM:role/CIRCLE_OPENID
+                profile_name: default
           repo: myapp
           tag: ${CIRCLE_SHA1}
           region: $AWS_REGION
