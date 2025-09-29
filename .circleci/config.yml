@@ -4,65 +4,31 @@ orbs:
   aws-cli: circleci/aws-cli@5.1.0
 
 executors:
-  docker-executor:
+  python-executor:
     docker:
-      - image: cimg/base:stable
-    resource_class: medium
-
-jobs:
-  build:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - checkout
-      - setup_remote_docker
-      - aws-cli/setup  # install AWS CLI
-      - run:
-          name: Build and push Docker image to ECR
-          command: |
-            AWS_REGION=us-east-1
-            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-            REPO=myapp
-
-            # Authenticate Docker with ECR
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-
-            # Build image with commit SHA
-            docker build -t $REPO:${CIRCLE_SHA1} .
-
-            # Tag with full ECR path
-            docker tag $REPO:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-
-            # Push commit-tagged image
-            docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-
-  test:
-    docker:
-      - image: cimg/python:3.10
-      - image: postgres:14
+      - image: cimg/python:3.11
+      - image: postgres:13
         environment:
           POSTGRES_USER: testuser
           POSTGRES_PASSWORD: testpassword
           POSTGRES_DB: testdb
+
+jobs:
+  test:
+    executor: python-executor
     steps:
       - checkout
       - run:
-          name: Wait for Postgres
-          command: |
-            for i in {1..30}; do
-              nc -z localhost 5432 && echo "Postgres is up" && exit 0
-              sleep 1
-            done
-            echo "Postgres did not start in time" && exit 1
+          name: Install dependencies
+          command: pip install -r requirements.txt
       - run:
           name: Run tests
           command: |
-            pip install -r requirements.txt
             pytest --junitxml=test-results/results.xml
       - store_test_results:
           path: test-results
 
-  deploy:
+  build:
     docker:
       - image: cimg/base:stable
     steps:
@@ -70,43 +36,24 @@ jobs:
       - setup_remote_docker
       - aws-cli/setup
       - run:
-          name: Pull and deploy Docker image
+          name: Build and push Docker image
           command: |
-            AWS_REGION=us-east-1
-            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-            REPO=myapp
-
-            # Authenticate Docker with ECR
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-
-            # Pull commit image
-            docker pull $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
-
-            # Optionally retag as latest
-            docker tag $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
-            docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:latest
-
-            # Example ECS update (placeholder)
-            echo "Updating ECS service..."
-            # aws ecs update-service --cluster mycluster --service myapp-service --force-new-deployment --region $AWS_REGION
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+              REPO=myapp
+              aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+              docker build -t $REPO:${CIRCLE_SHA1} .
+              docker tag $REPO:${CIRCLE_SHA1} $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+              docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:${CIRCLE_SHA1}
+            else
+              echo "Skipping ECR push for branch ${CIRCLE_BRANCH}"
+            fi
 
 workflows:
   version: 2
-  ci_pipeline:
+  pipeline:
     jobs:
+      - test
       - build:
-          filters:
-            branches:
-              ignore: gh-pages
-      - test:
-          requires:
-            - build
-          filters:
-            branches:
-              ignore: gh-pages
-      - deploy:
           requires:
             - test
-          filters:
-            branches:
-              only: main
