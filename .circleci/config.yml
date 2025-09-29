@@ -7,7 +7,7 @@ executors:
   python-executor:
     docker:
       - image: cimg/python:3.11
-      - image: postgres:13  # sidecar DB
+      - image: circleci/postgres:13  # sidecar DB
         environment:
           POSTGRES_USER: testuser
           POSTGRES_PASSWORD: testpassword
